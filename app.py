@@ -831,10 +831,7 @@ if st.session_state.calculated:
     else:
         breakdown_df["% of Income"] = 0.0
 
-    breakdown_df["Category Label"] = breakdown_df.apply(
-        lambda row: f"{row['Category']} ({row['% of Income']:.1%})",
-        axis=1,
-    )
+    breakdown_df["Category Label"] = breakdown_df["Category"]
 
     # -----------------------------
     # Results
@@ -1012,7 +1009,7 @@ if st.session_state.calculated:
                     "Category Label:N",
                     scale=color_scale,
                     title="Category",
-                    legend=alt.Legend(orient="right")
+                    legend=alt.Legend(orient="top", columns=3)
                 ),
                 opacity=alt.condition(hover, alt.value(1.0), alt.value(0.75)),
                 strokeWidth=alt.condition(hover, alt.value(3), alt.value(1)),
