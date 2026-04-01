@@ -8,12 +8,12 @@ import os
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-st.set_page_config(page_title="Ontario Tax Estimator", page_icon="💰")
+st.set_page_config(page_title="Ontario Employment Income Tax Estimator", page_icon="🧮")
 
 CURRENT_YEAR = 2026
 
 st.header(
-    "Ontario Personal Tax Estimator",
+    "Ontario Employment Income Tax Estimator",
     help="""
 Assumptions used in this estimate:
 
@@ -590,9 +590,9 @@ def generate_pdf_report(
         p.drawString(50, y, str(text))
         y -= gap
 
-    p.setTitle("Ontario Tax Estimator Report")
+    p.setTitle("Ontario Employment Income Tax Report")
 
-    line("Ontario Tax Estimator Report", gap=24, bold=True)
+    line("Ontario Employment Income Tax Report", gap=24, bold=True)
     line(f"Tax Year: {tax_year}")
     from datetime import datetime
     line(f"Generated on: {datetime.now().strftime('%Y-%m-%d')}")
@@ -980,10 +980,18 @@ if st.session_state.calculated:
 
         display_breakdown_df = breakdown_df.copy()
         display_breakdown_df["Amount"] = display_breakdown_df["Amount"] / display_divisor
+
+        display_breakdown_df["Label"] = (
+            display_breakdown_df["Category"]
+            + " ("
+            + (display_breakdown_df["% of Income"] * 100).round(0).astype(int).astype(str)
+            + "%)"
+        )
+
         total_income_display = display_breakdown_df["Amount"].sum()
 
         color_scale = alt.Scale(
-            domain=breakdown_df["Category Label"].tolist(),
+            domain=display_breakdown_df["Label"].tolist(),
             range=[
                 "#C62828",  # Tax
                 "#1565C0",  # CPP
@@ -995,7 +1003,7 @@ if st.session_state.calculated:
         )
 
         hover = alt.selection_point(
-            fields=["Category Label"],
+            fields=["Label"],
             on="mouseover",
             clear="mouseout"
         )
@@ -1006,7 +1014,7 @@ if st.session_state.calculated:
             .encode(
                 theta=alt.Theta("Amount:Q"),
                 color=alt.Color(
-                    "Category Label:N",
+                    "Label:N",
                     scale=color_scale,
                     title="Category",
                     legend=alt.Legend(orient="top", columns=3)
@@ -1469,7 +1477,7 @@ if st.session_state.calculated:
         st.download_button(
             label="Download PDF Report",
             data=pdf_bytes,
-            file_name=f"ontario_tax_estimate_{tax_year}.pdf",
+            file_name=f"ontario_employment_income_tax_estimate_{tax_year}.pdf",
             mime="application/pdf",
             type="primary",
         )
