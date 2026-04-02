@@ -23,7 +23,10 @@ CURRENT_YEAR = 2026
 DEFAULTS = {
     "tax_year": AVAILABLE_TAX_YEARS[0],
     "province": "ON",
+    "income_input_mode": "Annual Salary",
+    "income_preset": "Custom",
     "employment_income": 60000.0,
+    "salary_per_pay": 2307.69,
     "deductible_contribution": 0.0,
     "rpp_contribution": 0.0,
     "contribution_room_available": 10000.0,
@@ -33,6 +36,7 @@ DEFAULTS = {
     "annual_tax_withheld": 8000.0,
     "view_mode": "Annual",
     "calculated": False,
+    "last_tax_year": AVAILABLE_TAX_YEARS[0],
 }
 
 for key, value in DEFAULTS.items():
@@ -42,6 +46,23 @@ for key, value in DEFAULTS.items():
 def reset_form():
     for key, value in DEFAULTS.items():
         st.session_state[key] = value
+
+
+def adjust_deductible_contribution(
+    amount: float | None = None,
+    use_suggested: bool = False,
+    reset_to_zero: bool = False,
+):
+    if reset_to_zero:
+        target_value = 0.0
+    elif use_suggested:
+        target_value = st.session_state.get("suggested_contribution_value", 0.0)
+    else:
+        current_value = st.session_state.get("deductible_contribution", 0.0)
+        target_value = current_value + (amount or 0.0)
+
+    contribution_room = st.session_state.get("contribution_room_available", 0.0)
+    st.session_state.deductible_contribution = min(max(0.0, target_value), contribution_room)
 
 
 selected_province_name = PROVINCES[st.session_state.get("province", "ON")]
@@ -82,6 +103,10 @@ province = st.selectbox(
 
 province_name = PROVINCES[province]
 
+if st.session_state.tax_year != st.session_state.last_tax_year:
+    st.session_state.use_auto_withheld = st.session_state.tax_year >= CURRENT_YEAR
+    st.session_state.last_tax_year = st.session_state.tax_year
+
 if tax_year < CURRENT_YEAR:
     st.caption("Completed tax year: T4/full-year actual amount is usually the best choice.")
 else:
@@ -92,12 +117,62 @@ else:
 # -----------------------------
 st.subheader("2) Income")
 
-employment_income = st.number_input(
-    "Employment Income",
-    min_value=0.0,
-    step=1000.0,
-    key="employment_income",
+income_preset_map = {
+    "Custom": None,
+    "Biweekly employee": "Biweekly (26)",
+    "Monthly employee": "Monthly (12)",
+    "Weekly employee": "Weekly (52)",
+}
+
+income_preset = st.selectbox(
+    "Preset",
+    list(income_preset_map.keys()),
+    key="income_preset",
+    help="Use a common preset to reduce repeated pay frequency setup.",
 )
+
+if income_preset_map[income_preset]:
+    st.session_state.pay_frequency = income_preset_map[income_preset]
+    st.session_state.income_input_mode = "Per Pay Salary"
+    st.session_state.use_auto_withheld = True
+
+income_input_mode = st.radio(
+    "Income Input Method",
+    ["Annual Salary", "Per Pay Salary"],
+    horizontal=True,
+    key="income_input_mode",
+)
+
+pay_periods_map = {
+    "Weekly (52)": 52,
+    "Biweekly (26)": 26,
+    "Semi-monthly (24)": 24,
+    "Monthly (12)": 12,
+}
+
+pay_frequency = st.selectbox(
+    "Pay Frequency",
+    list(pay_periods_map.keys()),
+    key="pay_frequency",
+)
+
+if income_input_mode == "Annual Salary":
+    employment_income = st.number_input(
+        "Employment Income",
+        min_value=0.0,
+        step=1000.0,
+        key="employment_income",
+    )
+else:
+    salary_per_pay = st.number_input(
+        "Employment Income Per Pay",
+        min_value=0.0,
+        step=100.0,
+        key="salary_per_pay",
+    )
+    pay_periods_per_year = pay_periods_map[pay_frequency]
+    employment_income = salary_per_pay * pay_periods_per_year
+    st.info(f"Estimated Annual Employment Income: ${employment_income:,.2f}")
 
 deductible_contribution = st.number_input(
     "RRSP & FHSA Contribution",
@@ -120,7 +195,7 @@ contribution_room_available = st.number_input(
     min_value=0.0,
     step=500.0,
     key="contribution_room_available",
-    help="Enter your available RRSP and FHSA contribution room for planning purposes.",
+    help="Enter your available RRSP and FHSA contribution room for planning purposes. This is often the amount shown on your Notice of Assessment.",
 )
 
 st.caption("Contribution room applies to RRSP/FHSA only. RPP is treated separately as a fixed deduction.")
@@ -138,19 +213,7 @@ use_auto_withheld = st.checkbox(
 
 tax_withheld = 0.0
 
-pay_periods_map = {
-    "Weekly (52)": 52,
-    "Biweekly (26)": 26,
-    "Semi-monthly (24)": 24,
-    "Monthly (12)": 12,
-}
-
 if use_auto_withheld:
-    pay_frequency = st.selectbox(
-        "Pay Frequency",
-        list(pay_periods_map.keys()),
-        key="pay_frequency",
-    )
     tax_withheld_per_pay = st.number_input(
         "Income Tax Withheld Per Pay",
         min_value=0.0,
@@ -798,6 +861,7 @@ if st.session_state.calculated:
 
     contribution_gap = suggested_contribution - deductible_contribution
     contribution_used = deductible_contribution
+    st.session_state.suggested_contribution_value = suggested_contribution
 
     # ===== Step 3: calculate scenarios =====
     scenario_no_contribution = calculate_tax_scenario(
@@ -880,6 +944,7 @@ if st.session_state.calculated:
 
     difference = tax_withheld - total_tax
     difference_display = round(difference, 2)
+    target_withholding_gap = max(0.0, total_tax - tax_withheld)
 
     if abs(difference_display) < 0.01:
         difference_display = 0.0
@@ -1021,6 +1086,40 @@ if st.session_state.calculated:
         """,
         unsafe_allow_html=True,
     )
+
+    summary_col1, summary_col2, summary_col3 = st.columns(3)
+    summary_col1.metric("Estimated Total Tax", format_currency_by_mode(total_tax, view_mode))
+    summary_col2.metric("Refund / Owing", format_currency_by_mode(difference_display, view_mode))
+    summary_col3.metric(
+        "Suggested Contribution Gap",
+        format_currency_by_mode(max(0.0, contribution_gap), view_mode),
+    )
+
+    if difference_display > 0:
+        summary_line = (
+            f"At your current contribution level, you may receive a refund of {safe_currency(difference_display)}. "
+            f"Contributing {safe_currency(max(0.0, contribution_gap))} more may save about "
+            f"{safe_currency(additional_tax_saved_to_optimization)} more tax."
+        )
+    elif difference_display < 0:
+        summary_line = (
+            f"At your current contribution level, you may owe {safe_currency(abs(difference_display))}. "
+            f"Contributing {safe_currency(max(0.0, contribution_gap))} more may save about "
+            f"{safe_currency(additional_tax_saved_to_optimization)} more tax."
+        )
+    else:
+        summary_line = (
+            f"At your current contribution level, your withholding is close to your estimated tax. "
+            f"Contributing {safe_currency(max(0.0, contribution_gap))} more may save about "
+            f"{safe_currency(additional_tax_saved_to_optimization)} more tax."
+        )
+
+    st.info(summary_line)
+    st.caption("This is not payroll net pay. It is a simplified tax estimate based on annual employment income assumptions.")
+    st.caption("Want a deeper strategy and breakdown? Reach out: info@contexta.biz")
+
+    if province != "ON":
+        st.caption(f"{province_name} estimate uses simplified basic personal credit assumptions only.")
 
     takehome_col1, takehome_col2 = st.columns(2)
 
@@ -1179,6 +1278,52 @@ if st.session_state.calculated:
             "and does not consider provincial surtax or other factors."
             " RPP is treated separately as a fixed deduction."
         ),
+    )
+
+    st.markdown("#### Planning Tools")
+    planning_col1, planning_col2 = st.columns(2)
+    planning_col1.metric(
+        "Extra Tax to Set Aside",
+        format_currency_by_mode(target_withholding_gap, view_mode),
+        help="Target refund/owing = $0. This estimates the additional tax to set aside if your current withholding is not enough.",
+    )
+    if use_auto_withheld:
+        extra_tax_per_pay = (
+            target_withholding_gap / pay_periods_map[pay_frequency]
+            if pay_periods_map[pay_frequency] > 0
+            else 0.0
+        )
+        planning_col2.metric(
+            "Extra Tax Per Pay",
+            format_currency(extra_tax_per_pay),
+            help="Estimated extra tax to reserve each pay period to finish near $0 refund/owing.",
+        )
+    else:
+        planning_col2.metric(
+            "Target Refund / Owing",
+            format_currency_by_mode(0.0, view_mode),
+            help="A value of $0 means tax withheld matches estimated tax.",
+        )
+
+    st.markdown("#### What If Quick Buttons")
+    quick_col1, quick_col2, quick_col3 = st.columns(3)
+    quick_col1.button(
+        "+2000 RRSP/FHSA",
+        key="quick_rrsp_2000",
+        on_click=adjust_deductible_contribution,
+        kwargs={"amount": 2000.0},
+    )
+    quick_col2.button(
+        "Set to 0 RRSP/FHSA",
+        key="quick_rrsp_zero",
+        on_click=adjust_deductible_contribution,
+        kwargs={"reset_to_zero": True},
+    )
+    quick_col3.button(
+        "Set to Suggested",
+        key="quick_rrsp_suggested",
+        on_click=adjust_deductible_contribution,
+        kwargs={"use_suggested": True},
     )
 
     contribution_col1, contribution_col2, contribution_col3 = st.columns(3)
@@ -1370,8 +1515,22 @@ if st.session_state.calculated:
         ],
     )
 
+    suggested_zone_df = pd.DataFrame({
+        "x": [suggested_contribution / display_divisor],
+        "x2": [display_curve_df["contribution"].max() if not display_curve_df.empty else 0.0],
+    })
+
+    suggested_zone = alt.Chart(suggested_zone_df).mark_rect(
+        color=SUGGESTED_COLOR,
+        opacity=0.08,
+    ).encode(
+        x="x:Q",
+        x2="x2:Q",
+    )
+
     chart = (
-        line
+        suggested_zone
+        + line
         + current_rule
         + target_rule
         + current_text
@@ -1425,31 +1584,52 @@ if st.session_state.calculated:
     # -----------------------------
     st.markdown("---")
     with st.expander("Advanced Breakdown"):
+        breakdown_view = st.radio(
+            "Breakdown View",
+            ["Simple", "Detailed"],
+            horizontal=True,
+            key="advanced_breakdown_view",
+        )
+
+        if breakdown_view == "Simple":
+            st.caption("Simple view keeps the key calculation summary first. Switch to Detailed for tax rates, federal/provincial, and CPP/EI details below.")
 
         if difference_display >= 0:
             refund_label = "Estimated Refund"
         else:
             refund_label = "Estimated Amount Owing"
 
-        summary_rows = [
-            {"Item": "Employment Income", "Amount": employment_income},
-            {"Item": "Less: RRSP / FHSA Deduction", "Amount": -contribution_used},
-            {"Item": "Less: RPP Contribution", "Amount": -rpp_contribution},
-            {"Item": "Less: CPP Enhanced Deduction", "Amount": -cpp_enhanced_deduction},
-            {"Item": "Taxable Income", "Amount": taxable_income, "highlight": True},
-            {"Item": "Less: Federal Tax", "Amount": -federal_tax},
-            {"Item": f"Less: {province_name} Tax", "Amount": -provincial_tax},
-            {"Item": "Less: CPP Contribution", "Amount": -total_cpp},
-            {"Item": "Less: EI Premium", "Amount": -ei},
-            {"Item": "Add: CPP Enhanced Deduction", "Amount": cpp_enhanced_deduction},
-            {"Item": "Net Take-Home", "Amount": net_take_home, "highlight": True},
-            {"Item": "", "Amount": None},
-            {"Item": "Total Estimated Tax", "Amount": total_tax},
-            {"Item": "Income Tax Withheld", "Amount": tax_withheld},
-            {"Item": refund_label, "Amount": abs(difference_display)},
-            {"Item": f"{province_name} Surtax", "Amount": provincial_surtax},
-            {"Item": f"{province_name} Health Premium", "Amount": provincial_health_premium},
-        ]
+        if breakdown_view == "Simple":
+            summary_rows = [
+                {"Item": "Employment Income", "Amount": employment_income},
+                {"Item": "Taxable Income", "Amount": taxable_income, "highlight": True},
+                {"Item": "Federal Tax", "Amount": federal_tax},
+                {"Item": f"{province_name} Tax", "Amount": provincial_tax},
+                {"Item": "Net Take-Home", "Amount": net_take_home, "highlight": True},
+            ]
+        else:
+            summary_rows = [
+                {"Item": "Employment Income", "Amount": employment_income},
+                {"Item": "Less: RRSP / FHSA Deduction", "Amount": -contribution_used},
+                {"Item": "Less: RPP Contribution", "Amount": -rpp_contribution},
+                {"Item": "Less: CPP Enhanced Deduction", "Amount": -cpp_enhanced_deduction},
+                {"Item": "Taxable Income", "Amount": taxable_income, "highlight": True},
+                {"Item": "Less: Federal Tax", "Amount": -federal_tax},
+                {"Item": f"Less: {province_name} Tax", "Amount": -provincial_tax},
+                {"Item": "Less: CPP Contribution", "Amount": -total_cpp},
+                {"Item": "Less: EI Premium", "Amount": -ei},
+                {"Item": "Add: CPP Enhanced Deduction", "Amount": cpp_enhanced_deduction},
+                {"Item": "Net Take-Home", "Amount": net_take_home, "highlight": True},
+            ]
+
+            summary_rows.extend([
+                {"Item": "", "Amount": None},
+                {"Item": "Total Estimated Tax", "Amount": total_tax},
+                {"Item": "Income Tax Withheld", "Amount": tax_withheld},
+                {"Item": refund_label, "Amount": abs(difference_display)},
+                {"Item": f"{province_name} Surtax", "Amount": provincial_surtax},
+                {"Item": f"{province_name} Health Premium", "Amount": provincial_health_premium},
+            ])
 
         st.markdown("#### Calculation Summary")
 
@@ -1470,78 +1650,71 @@ if st.session_state.calculated:
                 st.write(f"{item}: {formatted_amount}")
 
         # 放 CTA 喺呢度
-        st.markdown("---")
 
-        st.info(
-            """
-        Want a deeper strategy and breakdown?
-        Reach out: **info@contexta.biz**
-        """
-        )
+        if breakdown_view == "Detailed":
+            st.markdown("---")
+            st.markdown("#### Tax Rates")
+            rate_col1, rate_col2 = st.columns(2)
+            rate_col1.metric("Effective Tax Rate", f"{effective_tax_rate:.2%}")
+            rate_col2.metric("Marginal Tax Rate", f"{combined_marginal_rate:.2%}")
 
-        st.markdown("---")
-        st.markdown("#### Tax Rates")
-        rate_col1, rate_col2 = st.columns(2)
-        rate_col1.metric("Effective Tax Rate", f"{effective_tax_rate:.2%}")
-        rate_col2.metric("Marginal Tax Rate", f"{combined_marginal_rate:.2%}")
+            st.markdown("---")
+            st.markdown("#### Tax Breakdown")
 
-        st.markdown("---")
-        st.markdown("#### Tax Breakdown")
+            federal_col, provincial_col = st.columns(2)
 
-        federal_col, provincial_col = st.columns(2)
+            with federal_col:
+                st.markdown("##### Federal")
+                st.metric("Estimated Federal Tax", format_currency_by_mode(federal_tax, view_mode))
 
-        with federal_col:
-            st.markdown("##### Federal")
-            st.metric("Estimated Federal Tax", format_currency_by_mode(federal_tax, view_mode))
+                with st.expander("Show Federal Details"):
+                    st.write(f"Federal Basic Tax: {format_currency_by_mode(federal_basic_tax, view_mode)}")
+                    st.write(f"Federal Basic Personal Amount: {format_currency_by_mode(federal_bpa, view_mode)}")
+                    st.write(f"Federal BPA Credit: {format_currency_by_mode(federal_bpa_credit, view_mode)}")
+                    st.write(
+                        f"Canada Employment Amount: {format_currency_by_mode(canada_employment_amount, view_mode)}"
+                    )
+                    st.write(f"Federal CEA Credit: {format_currency_by_mode(federal_cea_credit, view_mode)}")
+                    st.write(
+                        f"Federal CPP/EI Credit: {format_currency_by_mode(federal_cpp_ei_credit, view_mode)}"
+                    )
 
-            with st.expander("Show Federal Details"):
-                st.write(f"Federal Basic Tax: {format_currency_by_mode(federal_basic_tax, view_mode)}")
-                st.write(f"Federal Basic Personal Amount: {format_currency_by_mode(federal_bpa, view_mode)}")
-                st.write(f"Federal BPA Credit: {format_currency_by_mode(federal_bpa_credit, view_mode)}")
-                st.write(
-                    f"Canada Employment Amount: {format_currency_by_mode(canada_employment_amount, view_mode)}"
-                )
-                st.write(f"Federal CEA Credit: {format_currency_by_mode(federal_cea_credit, view_mode)}")
-                st.write(
-                    f"Federal CPP/EI Credit: {format_currency_by_mode(federal_cpp_ei_credit, view_mode)}"
-                )
-
-        with provincial_col:
-            st.markdown(f"##### {province_name}")
-            st.metric(
-                f"Estimated {province_name} Tax",
-                format_currency_by_mode(provincial_tax, view_mode),
-            )
-
-            with st.expander(f"Show {province_name} Details"):
-                st.write(f"{province_name} Basic Tax: {format_currency_by_mode(provincial_basic_tax, view_mode)}")
-                st.write(f"{province_name} Basic Personal Amount: {format_currency_by_mode(provincial_bpa, view_mode)}")
-                st.write(f"{province_name} BPA Credit: {format_currency_by_mode(provincial_bpa_credit, view_mode)}")
-                st.write(f"{province_name} CPP/EI Credit: {format_currency_by_mode(provincial_cpp_ei_credit, view_mode)}")
-                st.write(
-                    f"{province_name} Tax Before Surtax & Health Premium: "
-                    f"{format_currency_by_mode(provincial_tax_before_surtax_and_premium, view_mode)}"
-                )
-                st.write(f"{province_name} Surtax: {format_currency_by_mode(provincial_surtax, view_mode)}")
-                st.write(
-                    f"{province_name} Health Premium: {format_currency_by_mode(provincial_health_premium, view_mode)}"
+            with provincial_col:
+                st.markdown(f"##### {province_name}")
+                st.metric(
+                    f"Estimated {province_name} Tax",
+                    format_currency_by_mode(provincial_tax, view_mode),
                 )
 
-        st.markdown("---")
+                with st.expander(f"Show {province_name} Details"):
+                    st.write(f"{province_name} Basic Tax: {format_currency_by_mode(provincial_basic_tax, view_mode)}")
+                    st.write(f"{province_name} Basic Personal Amount: {format_currency_by_mode(provincial_bpa, view_mode)}")
+                    st.write(f"{province_name} BPA Credit: {format_currency_by_mode(provincial_bpa_credit, view_mode)}")
+                    st.write(f"{province_name} CPP/EI Credit: {format_currency_by_mode(provincial_cpp_ei_credit, view_mode)}")
+                    st.write(
+                        f"{province_name} Tax Before Surtax & Health Premium: "
+                        f"{format_currency_by_mode(provincial_tax_before_surtax_and_premium, view_mode)}"
+                    )
+                    st.write(f"{province_name} Surtax: {format_currency_by_mode(provincial_surtax, view_mode)}")
+                    st.write(
+                        f"{province_name} Health Premium: {format_currency_by_mode(provincial_health_premium, view_mode)}"
+                    )
 
-        st.markdown("#### CPP / EI Estimate")
+            st.markdown("---")
 
-        cpp_col1, cpp_col2, cpp_col3 = st.columns(3)
-        cpp_col1.metric("Total CPP", format_currency_by_mode(total_cpp, view_mode))
-        cpp_col2.metric("EI Premium", format_currency_by_mode(ei, view_mode))
-        cpp_col3.metric("CPP Enhanced Deduction", format_currency_by_mode(cpp_enhanced_deduction, view_mode))
+            st.markdown("#### CPP / EI Estimate")
 
-        with st.expander("Show CPP / EI Details"):
-            st.write(f"CPP Base Contribution: {format_currency_by_mode(cpp_base, view_mode)}")
-            st.write(f"CPP First Additional: {format_currency_by_mode(cpp_first_additional, view_mode)}")
-            st.write(f"CPP2: {format_currency_by_mode(cpp2, view_mode)}")
-            st.write(f"Total CPP: {format_currency_by_mode(total_cpp, view_mode)}")
-            st.write(f"EI Premium: {format_currency_by_mode(ei, view_mode)}")
+            cpp_col1, cpp_col2, cpp_col3 = st.columns(3)
+            cpp_col1.metric("Total CPP", format_currency_by_mode(total_cpp, view_mode))
+            cpp_col2.metric("EI Premium", format_currency_by_mode(ei, view_mode))
+            cpp_col3.metric("CPP Enhanced Deduction", format_currency_by_mode(cpp_enhanced_deduction, view_mode))
+
+            with st.expander("Show CPP / EI Details"):
+                st.write(f"CPP Base Contribution: {format_currency_by_mode(cpp_base, view_mode)}")
+                st.write(f"CPP First Additional: {format_currency_by_mode(cpp_first_additional, view_mode)}")
+                st.write(f"CPP2: {format_currency_by_mode(cpp2, view_mode)}")
+                st.write(f"Total CPP: {format_currency_by_mode(total_cpp, view_mode)}")
+                st.write(f"EI Premium: {format_currency_by_mode(ei, view_mode)}")
 
         pdf_bytes = generate_pdf_report(
             province_name=province_name,
