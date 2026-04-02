@@ -1,6 +1,11 @@
 import streamlit as st
 from tax_config import TAX_CONFIGS, AVAILABLE_TAX_YEARS
 
+st.set_page_config(
+    page_title="Contexta Income Tax Estimator",
+    page_icon="🧮",  
+)
+
 import pandas as pd
 import altair as alt
 import io
@@ -8,12 +13,10 @@ import os
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-st.set_page_config(page_title="Ontario Employment Income Tax Estimator", page_icon="🧮")
-
 CURRENT_YEAR = 2026
 
 st.header(
-    "Ontario Employment Income Tax Estimator",
+    "Ontario Income Tax Estimator",
     help="""
 Assumptions used in this estimate:
 
@@ -590,12 +593,46 @@ def generate_pdf_report(
         p.drawString(50, y, str(text))
         y -= gap
 
-    p.setTitle("Ontario Employment Income Tax Report")
+    p.setTitle("Ontario Income Tax Report")
 
-    line("Ontario Employment Income Tax Report", gap=24, bold=True)
+    line("Ontario Income Tax Report", gap=24, bold=True)
     line(f"Tax Year: {tax_year}")
     from datetime import datetime
     line(f"Generated on: {datetime.now().strftime('%Y-%m-%d')}")
+    line("")
+
+    insights = []
+
+    if difference_display > 0:
+        insights.append(f"You may receive a tax refund of {format_currency(difference_display)}.")
+    elif difference_display < 0:
+        insights.append(f"You may owe additional tax of {format_currency(abs(difference_display))}.")
+    else:
+        insights.append("Your tax withheld is aligned with your estimated tax.")
+
+    if contribution_gap > 0:
+        insights.append(f"You are already saving {format_currency(total_contribution_tax_saved)} in tax.")
+        insights.append(
+            f"Increase by {format_currency(contribution_gap)} to reach the suggested level and save about {format_currency(additional_tax_saved_to_optimization)} more."
+        )
+    elif contribution_gap < 0:
+        insights.append(
+            f"You are already saving {format_currency(total_contribution_tax_saved)} in tax compared with making no contribution."
+        )
+        insights.append(
+            "Your contribution may be above the most tax-efficient level, with limited additional tax benefit."
+        )
+    else:
+        insights.append(
+            f"You are already saving {format_currency(total_contribution_tax_saved)} in tax compared with making no contribution."
+        )
+        insights.append(
+            "Your contribution is already at the most tax-efficient contribution level."
+        )
+
+    line("Key Insights", bold=True)
+    for item in insights:
+        line(f"- {item}")
     line("")
 
     line("Input Summary", bold=True)
@@ -603,17 +640,6 @@ def generate_pdf_report(
     line(f"RRSP / FHSA Contribution: {format_currency(contribution_used)}")
     line(f"RPP Contribution: {format_currency(rpp_contribution)}")
     line(f"Tax Withheld: {format_currency(tax_withheld)}")
-    line("")
-
-    if difference_display > 0:
-        summary = f"You may receive a tax refund of {format_currency(difference_display)}"
-    elif difference_display < 0:
-        summary = f"You may owe additional tax of {format_currency(abs(difference_display))}"
-    else:
-        summary = "Your tax withheld is aligned with your estimated tax"
-
-    line("Summary", bold=True)
-    line(summary)
     line("")
 
     line("Estimated Results", bold=True)
@@ -1010,7 +1036,7 @@ if st.session_state.calculated:
 
         donut_chart = (
             alt.Chart(display_breakdown_df)
-            .mark_arc(innerRadius=80, outerRadius=140)
+            .mark_arc(innerRadius=80, outerRadius=130)
             .encode(
                 theta=alt.Theta("Amount:Q"),
                 color=alt.Color(
@@ -1392,8 +1418,8 @@ if st.session_state.calculated:
 
         st.info(
             """
-        📊 Want a deeper strategy and breakdown?
-        📧 Reach out anytime: **info@contexta.biz**
+        Want a deeper strategy and breakdown?
+        Reach out: **info@contexta.biz**
         """
         )
 
@@ -1477,7 +1503,7 @@ if st.session_state.calculated:
         st.download_button(
             label="Download PDF Report",
             data=pdf_bytes,
-            file_name=f"ontario_employment_income_tax_estimate_{tax_year}.pdf",
+            file_name=f"ontario_income_tax_estimate_{tax_year}.pdf",
             mime="application/pdf",
             type="primary",
         )
