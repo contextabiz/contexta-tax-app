@@ -1,5 +1,10 @@
 import streamlit as st
-from tax_config import TAX_CONFIGS, AVAILABLE_TAX_YEARS
+from tax_config import (
+    AVAILABLE_PROVINCES,
+    AVAILABLE_TAX_YEARS,
+    PROVINCES,
+    TAX_CONFIGS,
+)
 
 st.set_page_config(
     page_title="Contexta Income Tax Estimator",
@@ -15,22 +20,9 @@ from reportlab.pdfgen import canvas
 
 CURRENT_YEAR = 2026
 
-st.header(
-    "Ontario Income Tax Estimator",
-    help="""
-Assumptions used in this estimate:
-
-- Ontario resident (full year)
-- Employment income only (T4)
-- No spouse / dependents
-- Basic personal credits only
-- No tax credits (tuition, medical, donations, etc.)
-- No multiple-job payroll mismatch adjustments
-"""
-)
-
 DEFAULTS = {
     "tax_year": AVAILABLE_TAX_YEARS[0],
+    "province": "ON",
     "employment_income": 60000.0,
     "deductible_contribution": 0.0,
     "rpp_contribution": 0.0,
@@ -51,6 +43,23 @@ def reset_form():
     for key, value in DEFAULTS.items():
         st.session_state[key] = value
 
+
+selected_province_name = PROVINCES[st.session_state.get("province", "ON")]
+
+st.header(
+    f"{selected_province_name} Income Tax Estimator",
+    help=f"""
+Assumptions used in this estimate:
+
+- {selected_province_name} resident (full year)
+- Employment income only (T4)
+- No spouse / dependents
+- Basic personal credits only
+- No tax credits (tuition, medical, donations, etc.)
+- No multiple-job payroll mismatch adjustments
+"""
+)
+
 # -----------------------------
 # Input - Tax Year
 # -----------------------------
@@ -62,6 +71,16 @@ tax_year = st.selectbox(
     key="tax_year",
     help="Select the tax year you want to estimate. This may be different from the current calendar year."
 )
+
+province = st.selectbox(
+    "Province",
+    AVAILABLE_PROVINCES,
+    key="province",
+    format_func=lambda code: PROVINCES[code],
+    help="Select the province you want to estimate. This tool currently supports provinces only.",
+)
+
+province_name = PROVINCES[province]
 
 if tax_year < CURRENT_YEAR:
     st.caption("Completed tax year: T4/full-year actual amount is usually the best choice.")
@@ -262,16 +281,26 @@ def estimate_cpp_ei(employment_income: float, params):
     }
 
 
-def calculate_ontario_surtax(ontario_tax_after_credits: float, params) -> float:
+def calculate_provincial_surtax(provincial_tax_after_credits: float, province_params) -> float:
+    surtax_config = province_params.get("surtax")
+    if not surtax_config:
+        return 0.0
+
     surtax = 0.0
-    first_threshold = params["ontario_surtax_first_threshold"]
-    second_threshold = params["ontario_surtax_second_threshold"]
+    first_threshold, first_rate = surtax_config[0]
 
-    if ontario_tax_after_credits > first_threshold:
-        surtax += (min(ontario_tax_after_credits, second_threshold) - first_threshold) * 0.20
+    if provincial_tax_after_credits > first_threshold:
+        second_threshold = (
+            surtax_config[1][0] if len(surtax_config) > 1 else provincial_tax_after_credits
+        )
+        surtax += (
+            min(provincial_tax_after_credits, second_threshold) - first_threshold
+        ) * first_rate
 
-    if ontario_tax_after_credits > second_threshold:
-        surtax += (ontario_tax_after_credits - second_threshold) * 0.36
+    if len(surtax_config) > 1:
+        second_threshold, second_rate = surtax_config[1]
+        if provincial_tax_after_credits > second_threshold:
+            surtax += (provincial_tax_after_credits - second_threshold) * second_rate
 
     return max(0.0, surtax)
 
@@ -290,6 +319,12 @@ def calculate_ontario_health_premium(taxable_income: float) -> float:
     if income <= 200000:
         return min(750.0, 600.0 + 0.25 * (income - 72000.0))
     return min(900.0, 750.0 + 0.25 * (income - 200000.0))
+
+
+def calculate_provincial_health_premium(taxable_income: float, province_params) -> float:
+    if province_params.get("health_premium") == "ontario":
+        return calculate_ontario_health_premium(taxable_income)
+    return 0.0
 
 
 def get_lower_bracket_target(income: float, brackets):
@@ -314,7 +349,9 @@ def calculate_tax_scenario(
     contribution_used: float,
     rpp_contribution_used: float,
     params,
+    province_code: str,
 ):
+    province_params = params["provincial"][province_code]
     contributions = estimate_cpp_ei(employment_income, params)
 
     cpp_base = contributions["cpp_base"]
@@ -336,25 +373,25 @@ def calculate_tax_scenario(
     federal_basic_tax = calculate_progressive_tax(
         taxable_income, params["federal_brackets"]
     )
-    ontario_basic_tax = calculate_progressive_tax(
-        taxable_income, params["ontario_brackets"]
+    provincial_basic_tax = calculate_progressive_tax(
+        taxable_income, province_params["brackets"]
     )
 
     federal_bpa = calculate_federal_bpa(net_income, params)
-    ontario_bpa = params["ontario_bpa"]
+    provincial_bpa = province_params["basic_personal_amount"]
     canada_employment_amount = calculate_canada_employment_amount(
         employment_income, params
     )
 
     federal_credit_rate = params["federal_credit_rate"]
-    ontario_credit_rate = params["ontario_credit_rate"]
+    provincial_credit_rate = province_params["credit_rate"]
 
     federal_bpa_credit = federal_bpa * federal_credit_rate
     federal_cea_credit = canada_employment_amount * federal_credit_rate
     federal_cpp_ei_credit = (cpp_base + ei) * federal_credit_rate
 
-    ontario_bpa_credit = ontario_bpa * ontario_credit_rate
-    ontario_cpp_ei_credit = (cpp_base + ei) * ontario_credit_rate
+    provincial_bpa_credit = provincial_bpa * provincial_credit_rate
+    provincial_cpp_ei_credit = (cpp_base + ei) * provincial_credit_rate
 
     federal_tax = max(
         0.0,
@@ -364,25 +401,27 @@ def calculate_tax_scenario(
         - federal_cpp_ei_credit,
     )
 
-    ontario_tax_before_surtax_and_ohp = max(
+    provincial_tax_before_surtax_and_premium = max(
         0.0,
-        ontario_basic_tax
-        - ontario_bpa_credit
-        - ontario_cpp_ei_credit,
+        provincial_basic_tax
+        - provincial_bpa_credit
+        - provincial_cpp_ei_credit,
     )
 
-    ontario_surtax = calculate_ontario_surtax(
-        ontario_tax_before_surtax_and_ohp, params
+    provincial_surtax = calculate_provincial_surtax(
+        provincial_tax_before_surtax_and_premium, province_params
     )
-    ontario_health_premium = calculate_ontario_health_premium(taxable_income)
-
-    ontario_tax = (
-        ontario_tax_before_surtax_and_ohp
-        + ontario_surtax
-        + ontario_health_premium
+    provincial_health_premium = calculate_provincial_health_premium(
+        taxable_income, province_params
     )
 
-    total_tax = federal_tax + ontario_tax
+    provincial_tax = (
+        provincial_tax_before_surtax_and_premium
+        + provincial_surtax
+        + provincial_health_premium
+    )
+
+    total_tax = federal_tax + provincial_tax
 
     return {
         "cpp_base": cpp_base,
@@ -394,20 +433,20 @@ def calculate_tax_scenario(
         "net_income": net_income,
         "taxable_income": taxable_income,
         "federal_basic_tax": federal_basic_tax,
-        "ontario_basic_tax": ontario_basic_tax,
+        "provincial_basic_tax": provincial_basic_tax,
         "federal_bpa": federal_bpa,
-        "ontario_bpa": ontario_bpa,
+        "provincial_bpa": provincial_bpa,
         "canada_employment_amount": canada_employment_amount,
         "federal_bpa_credit": federal_bpa_credit,
         "federal_cea_credit": federal_cea_credit,
         "federal_cpp_ei_credit": federal_cpp_ei_credit,
-        "ontario_bpa_credit": ontario_bpa_credit,
-        "ontario_cpp_ei_credit": ontario_cpp_ei_credit,
+        "provincial_bpa_credit": provincial_bpa_credit,
+        "provincial_cpp_ei_credit": provincial_cpp_ei_credit,
         "federal_tax": federal_tax,
-        "ontario_tax_before_surtax_and_ohp": ontario_tax_before_surtax_and_ohp,
-        "ontario_surtax": ontario_surtax,
-        "ontario_health_premium": ontario_health_premium,
-        "ontario_tax": ontario_tax,
+        "provincial_tax_before_surtax_and_premium": provincial_tax_before_surtax_and_premium,
+        "provincial_surtax": provincial_surtax,
+        "provincial_health_premium": provincial_health_premium,
+        "provincial_tax": provincial_tax,
         "total_tax": total_tax,
     }
 
@@ -418,6 +457,7 @@ def calculate_contribution_bands(
     optimization_target: float,
     rpp_contribution: float,
     params,
+    province_code: str,
 ):
     contribution_used = max(0.0, contribution_used)
     optimization_target = max(0.0, optimization_target)
@@ -467,6 +507,7 @@ def calculate_contribution_bands(
             from_contribution,
             rpp_contribution,
             params,
+            province_code,
         )["total_tax"]
 
         tax_after = calculate_tax_scenario(
@@ -474,6 +515,7 @@ def calculate_contribution_bands(
             to_contribution,
             rpp_contribution,
             params,
+            province_code,
         )["total_tax"]
 
         tax_saved = tax_before - tax_after
@@ -495,6 +537,7 @@ def build_tax_curve_data(
     max_contribution: float,
     rpp_contribution: float,
     params,
+    province_code: str,
     step: float = 1000.0,
 ):
     base_tax = calculate_tax_scenario(
@@ -502,6 +545,7 @@ def build_tax_curve_data(
         0.0,
         rpp_contribution,
         params,
+        province_code,
     )["total_tax"]
 
     curve = []
@@ -513,6 +557,7 @@ def build_tax_curve_data(
             contribution,
             rpp_contribution,
             params,
+            province_code,
         )
 
         curve.append({
@@ -530,6 +575,7 @@ def build_tax_curve_data(
             max_contribution,
             rpp_contribution,
             params,
+            province_code,
         )
         curve.append({
             "contribution": max_contribution,
@@ -548,6 +594,7 @@ def safe_currency(x):
     return format_currency(x).replace("$", "\\$")
 
 def generate_pdf_report(
+    province_name: str,
     tax_year: int,
     employment_income: float,
     contribution_used: float,
@@ -561,6 +608,8 @@ def generate_pdf_report(
     difference_display: float,
     suggested_contribution: float,
     total_contribution_tax_saved: float,
+    contribution_gap: float,
+    additional_tax_saved_to_optimization: float,
 ):
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=A4)
@@ -593,9 +642,10 @@ def generate_pdf_report(
         p.drawString(50, y, str(text))
         y -= gap
 
-    p.setTitle("Ontario Income Tax Report")
+    report_title = f"{province_name} Income Tax Report"
+    p.setTitle(report_title)
 
-    line("Ontario Income Tax Report", gap=24, bold=True)
+    line(report_title, gap=24, bold=True)
     line(f"Tax Year: {tax_year}")
     from datetime import datetime
     line(f"Generated on: {datetime.now().strftime('%Y-%m-%d')}")
@@ -657,7 +707,7 @@ def generate_pdf_report(
 
     line("Disclaimer", bold=True)
     line("This is a simplified estimator for employment income scenarios.")
-    line("Actual taxes may vary depending on credits, deductions, and CRA rules.")
+    line(f"Actual taxes may vary depending on credits, deductions, {province_name} rules, and CRA rules.")
     line("")
     line("Need a personalized tax or investment strategy?", bold=True)
     line("Contact: info@contexta.biz")
@@ -704,6 +754,7 @@ if st.session_state.calculated and validation_errors:
 
 if st.session_state.calculated:
     params = TAX_CONFIGS[tax_year]
+    province_params = params["provincial"][province]
 
     # ===== Step 1: planning base =====
     contributions = estimate_cpp_ei(employment_income, params)
@@ -718,10 +769,10 @@ if st.session_state.calculated:
     federal_marginal_rate = get_marginal_rate(
         planning_taxable_income, params["federal_brackets"]
     )
-    ontario_marginal_rate = get_marginal_rate(
-        planning_taxable_income, params["ontario_brackets"]
+    provincial_marginal_rate = get_marginal_rate(
+        planning_taxable_income, province_params["brackets"]
     )
-    combined_marginal_rate = federal_marginal_rate + ontario_marginal_rate
+    combined_marginal_rate = federal_marginal_rate + provincial_marginal_rate
 
     # ===== Step 2: optimization target contribution =====
     base_taxable_income_for_target = max(
@@ -754,18 +805,21 @@ if st.session_state.calculated:
         0.0,
         rpp_contribution,
         params,
+        province,
     )
     scenario_current_contribution = calculate_tax_scenario(
         employment_income,
         contribution_used,
         rpp_contribution,
         params,
+        province,
     )
     scenario_suggested_contribution = calculate_tax_scenario(
         employment_income,
         suggested_contribution,
         rpp_contribution,
         params,
+        province,
     )
 
     # Use current scenario as final display scenario
@@ -780,22 +834,22 @@ if st.session_state.calculated:
     taxable_income = scenario_current_contribution["taxable_income"]
 
     federal_basic_tax = scenario_current_contribution["federal_basic_tax"]
-    ontario_basic_tax = scenario_current_contribution["ontario_basic_tax"]
+    provincial_basic_tax = scenario_current_contribution["provincial_basic_tax"]
     federal_bpa = scenario_current_contribution["federal_bpa"]
-    ontario_bpa = scenario_current_contribution["ontario_bpa"]
+    provincial_bpa = scenario_current_contribution["provincial_bpa"]
     canada_employment_amount = scenario_current_contribution["canada_employment_amount"]
     federal_bpa_credit = scenario_current_contribution["federal_bpa_credit"]
     federal_cea_credit = scenario_current_contribution["federal_cea_credit"]
     federal_cpp_ei_credit = scenario_current_contribution["federal_cpp_ei_credit"]
-    ontario_bpa_credit = scenario_current_contribution["ontario_bpa_credit"]
-    ontario_cpp_ei_credit = scenario_current_contribution["ontario_cpp_ei_credit"]
+    provincial_bpa_credit = scenario_current_contribution["provincial_bpa_credit"]
+    provincial_cpp_ei_credit = scenario_current_contribution["provincial_cpp_ei_credit"]
     federal_tax = scenario_current_contribution["federal_tax"]
-    ontario_tax_before_surtax_and_ohp = scenario_current_contribution[
-        "ontario_tax_before_surtax_and_ohp"
+    provincial_tax_before_surtax_and_premium = scenario_current_contribution[
+        "provincial_tax_before_surtax_and_premium"
     ]
-    ontario_surtax = scenario_current_contribution["ontario_surtax"]
-    ontario_health_premium = scenario_current_contribution["ontario_health_premium"]
-    ontario_tax = scenario_current_contribution["ontario_tax"]
+    provincial_surtax = scenario_current_contribution["provincial_surtax"]
+    provincial_health_premium = scenario_current_contribution["provincial_health_premium"]
+    provincial_tax = scenario_current_contribution["provincial_tax"]
     total_tax = scenario_current_contribution["total_tax"]
 
     # ===== Step 4: savings and outputs =====
@@ -812,6 +866,7 @@ if st.session_state.calculated:
         suggested_contribution,
         rpp_contribution,
         params,
+        province,
     )
 
     tax_curve_data = build_tax_curve_data(
@@ -819,6 +874,7 @@ if st.session_state.calculated:
         contribution_room_available,
         rpp_contribution,
         params,
+        province,
         step=1000.0,
     )
 
@@ -1382,7 +1438,7 @@ if st.session_state.calculated:
             {"Item": "Less: CPP Enhanced Deduction", "Amount": -cpp_enhanced_deduction},
             {"Item": "Taxable Income", "Amount": taxable_income, "highlight": True},
             {"Item": "Less: Federal Tax", "Amount": -federal_tax},
-            {"Item": "Less: Ontario Tax", "Amount": -ontario_tax},
+            {"Item": f"Less: {province_name} Tax", "Amount": -provincial_tax},
             {"Item": "Less: CPP Contribution", "Amount": -total_cpp},
             {"Item": "Less: EI Premium", "Amount": -ei},
             {"Item": "Add: CPP Enhanced Deduction", "Amount": cpp_enhanced_deduction},
@@ -1391,8 +1447,8 @@ if st.session_state.calculated:
             {"Item": "Total Estimated Tax", "Amount": total_tax},
             {"Item": "Income Tax Withheld", "Amount": tax_withheld},
             {"Item": refund_label, "Amount": abs(difference_display)},
-            {"Item": "Ontario Surtax", "Amount": ontario_surtax},
-            {"Item": "Ontario Health Premium", "Amount": ontario_health_premium},
+            {"Item": f"{province_name} Surtax", "Amount": provincial_surtax},
+            {"Item": f"{province_name} Health Premium", "Amount": provincial_health_premium},
         ]
 
         st.markdown("#### Calculation Summary")
@@ -1432,7 +1488,7 @@ if st.session_state.calculated:
         st.markdown("---")
         st.markdown("#### Tax Breakdown")
 
-        federal_col, ontario_col = st.columns(2)
+        federal_col, provincial_col = st.columns(2)
 
         with federal_col:
             st.markdown("##### Federal")
@@ -1450,22 +1506,25 @@ if st.session_state.calculated:
                     f"Federal CPP/EI Credit: {format_currency_by_mode(federal_cpp_ei_credit, view_mode)}"
                 )
 
-        with ontario_col:
-            st.markdown("##### Ontario")
-            st.metric("Estimated Ontario Tax", format_currency_by_mode(ontario_tax, view_mode))
+        with provincial_col:
+            st.markdown(f"##### {province_name}")
+            st.metric(
+                f"Estimated {province_name} Tax",
+                format_currency_by_mode(provincial_tax, view_mode),
+            )
 
-            with st.expander("Show Ontario Details"):
-                st.write(f"Ontario Basic Tax: {format_currency_by_mode(ontario_basic_tax, view_mode)}")
-                st.write(f"Ontario Basic Personal Amount: {format_currency_by_mode(ontario_bpa, view_mode)}")
-                st.write(f"Ontario BPA Credit: {format_currency_by_mode(ontario_bpa_credit, view_mode)}")
-                st.write(f"Ontario CPP/EI Credit: {format_currency_by_mode(ontario_cpp_ei_credit, view_mode)}")
+            with st.expander(f"Show {province_name} Details"):
+                st.write(f"{province_name} Basic Tax: {format_currency_by_mode(provincial_basic_tax, view_mode)}")
+                st.write(f"{province_name} Basic Personal Amount: {format_currency_by_mode(provincial_bpa, view_mode)}")
+                st.write(f"{province_name} BPA Credit: {format_currency_by_mode(provincial_bpa_credit, view_mode)}")
+                st.write(f"{province_name} CPP/EI Credit: {format_currency_by_mode(provincial_cpp_ei_credit, view_mode)}")
                 st.write(
-                    "Ontario Tax Before Surtax & Health Premium: "
-                    f"{format_currency_by_mode(ontario_tax_before_surtax_and_ohp, view_mode)}"
+                    f"{province_name} Tax Before Surtax & Health Premium: "
+                    f"{format_currency_by_mode(provincial_tax_before_surtax_and_premium, view_mode)}"
                 )
-                st.write(f"Ontario Surtax: {format_currency_by_mode(ontario_surtax, view_mode)}")
+                st.write(f"{province_name} Surtax: {format_currency_by_mode(provincial_surtax, view_mode)}")
                 st.write(
-                    f"Ontario Health Premium: {format_currency_by_mode(ontario_health_premium, view_mode)}"
+                    f"{province_name} Health Premium: {format_currency_by_mode(provincial_health_premium, view_mode)}"
                 )
 
         st.markdown("---")
@@ -1485,6 +1544,7 @@ if st.session_state.calculated:
             st.write(f"EI Premium: {format_currency_by_mode(ei, view_mode)}")
 
         pdf_bytes = generate_pdf_report(
+            province_name=province_name,
             tax_year=tax_year,
             employment_income=employment_income,
             contribution_used=contribution_used,
@@ -1498,12 +1558,14 @@ if st.session_state.calculated:
             difference_display=difference_display,
             suggested_contribution=suggested_contribution,
             total_contribution_tax_saved=total_contribution_tax_saved,
+            contribution_gap=contribution_gap,
+            additional_tax_saved_to_optimization=additional_tax_saved_to_optimization,
         )
 
         st.download_button(
             label="Download PDF Report",
             data=pdf_bytes,
-            file_name=f"ontario_income_tax_estimate_{tax_year}.pdf",
+            file_name=f"{province_name.lower().replace(' ', '_')}_income_tax_estimate_{tax_year}.pdf",
             mime="application/pdf",
             type="primary",
         )

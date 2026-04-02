@@ -1,9 +1,21 @@
+PROVINCES = {
+    "AB": "Alberta",
+    "BC": "British Columbia",
+    "MB": "Manitoba",
+    "NB": "New Brunswick",
+    "NL": "Newfoundland and Labrador",
+    "NS": "Nova Scotia",
+    "ON": "Ontario",
+    "PE": "Prince Edward Island",
+    "SK": "Saskatchewan",
+}
+
+
 TAX_CONFIGS = {
     2025: {
         "year": 2025,
-
         "federal_brackets": [
-            (57375.0, 0.145),
+            (57375.0, 0.14),
             (114750.0, 0.205),
             (177882.0, 0.26),
             (253414.0, 0.29),
@@ -14,20 +26,7 @@ TAX_CONFIGS = {
         "federal_bpa_phaseout_start": 177882.0,
         "federal_bpa_phaseout_end": 253414.0,
         "canada_employment_amount_max": 1471.0,
-        "federal_credit_rate": 0.145,
-
-        "ontario_brackets": [
-            (52886.0, 0.0505),
-            (105775.0, 0.0915),
-            (150000.0, 0.1116),
-            (220000.0, 0.1216),
-            (float("inf"), 0.1316),
-        ],
-        "ontario_bpa": 12747.0,
-        "ontario_credit_rate": 0.0505,
-        "ontario_surtax_first_threshold": 5710.0,
-        "ontario_surtax_second_threshold": 7307.0,
-
+        "federal_credit_rate": 0.14,
         "cpp_ympe": 71300.0,
         "cpp_yampe": 81200.0,
         "cpp_basic_exemption": 3500.0,
@@ -37,11 +36,125 @@ TAX_CONFIGS = {
         "cpp2_rate": 0.0400,
         "ei_max_insurable_earnings": 65700.0,
         "ei_rate": 0.0164,
+        "provincial": {
+            "AB": {
+                "name": "Alberta",
+                "brackets": [
+                    (60000.0, 0.06),
+                    (151234.0, 0.10),
+                    (181481.0, 0.12),
+                    (241974.0, 0.13),
+                    (362961.0, 0.14),
+                    (float("inf"), 0.15),
+                ],
+                "basic_personal_amount": 22323.0,
+                "credit_rate": 0.06,
+            },
+            "BC": {
+                "name": "British Columbia",
+                "brackets": [
+                    (49279.0, 0.0506),
+                    (98560.0, 0.0770),
+                    (113158.0, 0.1050),
+                    (137407.0, 0.1229),
+                    (186306.0, 0.1470),
+                    (259829.0, 0.1680),
+                    (float("inf"), 0.2050),
+                ],
+                "basic_personal_amount": 12932.0,
+                "credit_rate": 0.0506,
+            },
+            "MB": {
+                "name": "Manitoba",
+                "brackets": [
+                    (46513.0, 0.1080),
+                    (98796.0, 0.1275),
+                    (float("inf"), 0.1740),
+                ],
+                "basic_personal_amount": 15591.0,
+                "credit_rate": 0.1080,
+            },
+            "NB": {
+                "name": "New Brunswick",
+                "brackets": [
+                    (51306.0, 0.0940),
+                    (102614.0, 0.1400),
+                    (190060.0, 0.1600),
+                    (float("inf"), 0.1950),
+                ],
+                "basic_personal_amount": 13396.0,
+                "credit_rate": 0.0940,
+            },
+            "NL": {
+                "name": "Newfoundland and Labrador",
+                "brackets": [
+                    (44192.0, 0.0870),
+                    (88382.0, 0.1450),
+                    (157792.0, 0.1580),
+                    (220910.0, 0.1780),
+                    (282214.0, 0.1980),
+                    (564429.0, 0.2080),
+                    (1128858.0, 0.2130),
+                    (float("inf"), 0.2180),
+                ],
+                "basic_personal_amount": 11067.0,
+                "credit_rate": 0.0870,
+            },
+            "NS": {
+                "name": "Nova Scotia",
+                "brackets": [
+                    (30507.0, 0.0879),
+                    (61015.0, 0.1495),
+                    (95883.0, 0.1667),
+                    (154650.0, 0.1750),
+                    (float("inf"), 0.2100),
+                ],
+                "basic_personal_amount": 11744.0,
+                "credit_rate": 0.0879,
+            },
+            "ON": {
+                "name": "Ontario",
+                "brackets": [
+                    (52886.0, 0.0505),
+                    (105775.0, 0.0915),
+                    (150000.0, 0.1116),
+                    (220000.0, 0.1216),
+                    (float("inf"), 0.1316),
+                ],
+                "basic_personal_amount": 12747.0,
+                "credit_rate": 0.0505,
+                "surtax": [
+                    (5710.0, 0.20),
+                    (7307.0, 0.36),
+                ],
+                "health_premium": "ontario",
+            },
+            "PE": {
+                "name": "Prince Edward Island",
+                "brackets": [
+                    (33328.0, 0.0950),
+                    (64656.0, 0.1347),
+                    (105000.0, 0.1660),
+                    (140000.0, 0.1762),
+                    (float("inf"), 0.1900),
+                ],
+                "basic_personal_amount": 15050.0,
+                "credit_rate": 0.0950,
+            },
+            "SK": {
+                "name": "Saskatchewan",
+                "brackets": [
+                    (53463.0, 0.1050),
+                    (152750.0, 0.1250),
+                    (float("inf"), 0.1450),
+                ],
+                "basic_personal_amount": 19991.0,
+                "credit_rate": 0.1050,
+            },
+        },
     },
-
     2026: {
         "year": 2026,
-
         "federal_brackets": [
             (58523.0, 0.14),
             (117045.0, 0.205),
@@ -55,19 +168,6 @@ TAX_CONFIGS = {
         "federal_bpa_phaseout_end": 258482.0,
         "canada_employment_amount_max": 1501.0,
         "federal_credit_rate": 0.14,
-
-        "ontario_brackets": [
-            (53891.0, 0.0505),
-            (107785.0, 0.0915),
-            (150000.0, 0.1116),
-            (220000.0, 0.1216),
-            (float("inf"), 0.1316),
-        ],
-        "ontario_bpa": 12989.0,
-        "ontario_credit_rate": 0.0505,
-        "ontario_surtax_first_threshold": 5818.0,
-        "ontario_surtax_second_threshold": 7446.0,
-
         "cpp_ympe": 74600.0,
         "cpp_yampe": 85000.0,
         "cpp_basic_exemption": 3500.0,
@@ -77,7 +177,125 @@ TAX_CONFIGS = {
         "cpp2_rate": 0.0400,
         "ei_max_insurable_earnings": 68900.0,
         "ei_rate": 0.0163,
+        "provincial": {
+            "AB": {
+                "name": "Alberta",
+                "brackets": [
+                    (60000.0, 0.08),
+                    (151234.0, 0.10),
+                    (181481.0, 0.12),
+                    (241974.0, 0.13),
+                    (362961.0, 0.14),
+                    (float("inf"), 0.15),
+                ],
+                "basic_personal_amount": 22769.0,
+                "credit_rate": 0.08,
+            },
+            "BC": {
+                "name": "British Columbia",
+                "brackets": [
+                    (50087.0, 0.0506),
+                    (100175.0, 0.0770),
+                    (114750.0, 0.1050),
+                    (139270.0, 0.1229),
+                    (189639.0, 0.1470),
+                    (264302.0, 0.1680),
+                    (float("inf"), 0.2050),
+                ],
+                "basic_personal_amount": 13216.0,
+                "credit_rate": 0.0506,
+            },
+            "MB": {
+                "name": "Manitoba",
+                "brackets": [
+                    (47000.0, 0.1080),
+                    (100000.0, 0.1275),
+                    (float("inf"), 0.1740),
+                ],
+                "basic_personal_amount": 15780.0,
+                "credit_rate": 0.1080,
+            },
+            "NB": {
+                "name": "New Brunswick",
+                "brackets": [
+                    (52557.0, 0.0940),
+                    (105113.0, 0.1400),
+                    (194894.0, 0.1600),
+                    (float("inf"), 0.1950),
+                ],
+                "basic_personal_amount": 13664.0,
+                "credit_rate": 0.0940,
+            },
+            "NL": {
+                "name": "Newfoundland and Labrador",
+                "brackets": [
+                    (44897.0, 0.0870),
+                    (89795.0, 0.1450),
+                    (160613.0, 0.1580),
+                    (224282.0, 0.1780),
+                    (286791.0, 0.1980),
+                    (573583.0, 0.2080),
+                    (1147165.0, 0.2130),
+                    (float("inf"), 0.2180),
+                ],
+                "basic_personal_amount": 11188.0,
+                "credit_rate": 0.0870,
+            },
+            "NS": {
+                "name": "Nova Scotia",
+                "brackets": [
+                    (31394.0, 0.0879),
+                    (62789.0, 0.1495),
+                    (98667.0, 0.1667),
+                    (159483.0, 0.1750),
+                    (float("inf"), 0.2100),
+                ],
+                "basic_personal_amount": 11932.0,
+                "credit_rate": 0.0879,
+            },
+            "ON": {
+                "name": "Ontario",
+                "brackets": [
+                    (53891.0, 0.0505),
+                    (107785.0, 0.0915),
+                    (150000.0, 0.1116),
+                    (220000.0, 0.1216),
+                    (float("inf"), 0.1316),
+                ],
+                "basic_personal_amount": 12989.0,
+                "credit_rate": 0.0505,
+                "surtax": [
+                    (5818.0, 0.20),
+                    (7446.0, 0.36),
+                ],
+                "health_premium": "ontario",
+            },
+            "PE": {
+                "name": "Prince Edward Island",
+                "brackets": [
+                    (34198.0, 0.0950),
+                    (68400.0, 0.1347),
+                    (105000.0, 0.1660),
+                    (140000.0, 0.1762),
+                    (float("inf"), 0.1900),
+                ],
+                "basic_personal_amount": 15000.0,
+                "credit_rate": 0.0950,
+            },
+            "SK": {
+                "name": "Saskatchewan",
+                "brackets": [
+                    (55677.0, 0.1050),
+                    (159741.0, 0.1250),
+                    (float("inf"), 0.1450),
+                ],
+                "basic_personal_amount": 20381.0,
+                "credit_rate": 0.1050,
+            },
+        },
     },
 }
 
+
 AVAILABLE_TAX_YEARS = sorted(TAX_CONFIGS.keys())
+AVAILABLE_PROVINCES = list(PROVINCES.keys())
