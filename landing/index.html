@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Canadian Income Tax Estimator | Federal & Provincial Tax Calculator</title>
+  <meta name="description" content="Simple Canadian income tax estimator with federal and provincial tax estimates, RRSP/FHSA planning, refund or owing insights, and downloadable PDF reports.">
+
+  <meta property="og:title" content="Canadian Income Tax Estimator">
+  <meta property="og:description" content="Estimate federal and provincial income tax, preview refund or owing, and explore RRSP/FHSA contribution strategies with a simple Canadian tax calculator.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://tax.contexta.biz/">
+  <meta property="og:image" content="https://tax.contexta.biz/canadian-income-tax-estimator-og.jpg">
+  <meta property="og:site_name" content="Contexta">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Canadian Income Tax Estimator">
+  <meta name="twitter:description" content="Estimate federal and provincial income tax, preview refund or owing, and explore RRSP/FHSA contribution strategies with a simple Canadian tax calculator.">
+  <meta name="twitter:image" content="https://tax.contexta.biz/canadian-income-tax-estimator-og.jpg">
+
+  <meta http-equiv="refresh" content="2; url=/app/">
+  <link rel="canonical" href="https://tax.contexta.biz/">
+
+  <style>
+    :root {
+      --bg: #f4f7f4;
+      --panel: #ffffff;
+      --text: #123227;
+      --muted: #4e6b61;
+      --accent: #1c8f63;
+      --accent-dark: #126746;
+      --border: #d7e5dc;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      background:
+        radial-gradient(circle at top left, #ebf7ef 0, transparent 38%),
+        linear-gradient(180deg, #f7faf8 0%, var(--bg) 100%);
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .card {
+      width: min(640px, 100%);
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 32px;
+      box-shadow: 0 18px 50px rgba(18, 50, 39, 0.08);
+      text-align: center;
+    }
+
+    .eyebrow {
+      font-size: 0.8rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent-dark);
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      margin: 0 0 14px;
+      font-size: clamp(2rem, 4vw, 2.8rem);
+      line-height: 1.1;
+    }
+
+    p {
+      margin: 0 auto 22px;
+      max-width: 46ch;
+      color: var(--muted);
+      font-size: 1.02rem;
+      line-height: 1.6;
+    }
+
+    .actions {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 20px;
+      border-radius: 999px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+    }
+
+    .button.primary {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 10px 24px rgba(28, 143, 99, 0.24);
+    }
+
+    .button.secondary {
+      background: #eef6f1;
+      color: var(--accent-dark);
+      border: 1px solid var(--border);
+    }
+
+    .button:hover {
+      transform: translateY(-1px);
+    }
+
+    .footnote {
+      margin-top: 16px;
+      font-size: 0.9rem;
+      color: #668377;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="eyebrow">Contexta</div>
+    <h1>Canadian Income Tax Estimator</h1>
+    <p>Estimate federal and provincial income tax, preview refund or owing, and explore RRSP/FHSA contribution strategies in one place.</p>
+
+    <div class="actions">
+      <a class="button primary" href="/app/">Open Calculator</a>
+      <a class="button secondary" href="mailto:info@contexta.biz">Contact Contexta</a>
+    </div>
+
+    <div class="footnote">Redirecting to the calculator...</div>
+  </main>
+
+  <script>
+    window.setTimeout(() => {
+      window.location.replace("/app/");
+    }, 1200);
+  </script>
+</body>
+</html>

@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from tax_config import (
     AVAILABLE_PROVINCES,
     AVAILABLE_TAX_YEARS,
@@ -6,8 +7,21 @@ from tax_config import (
     TAX_CONFIGS,
 )
 
+META_TITLE = "Canadian Income Tax Estimator | Federal & Provincial Tax Calculator"
+META_DESCRIPTION = (
+    "Simple Canadian income tax estimator with federal and provincial tax estimates, "
+    "RRSP/FHSA planning, refund or owing insights, and downloadable PDF reports."
+)
+OG_TITLE = "Canadian Income Tax Estimator"
+OG_DESCRIPTION = (
+    "Estimate federal and provincial income tax, preview refund or owing, and "
+    "explore RRSP/FHSA contribution strategies with a simple Canadian tax calculator."
+)
+APP_URL = "https://tax.contexta.biz/"
+OG_IMAGE_URL = "https://tax.contexta.biz/canadian-income-tax-estimator-og.jpg"
+
 st.set_page_config(
-    page_title="Contexta Income Tax Estimator",
+    page_title=META_TITLE,
     page_icon="🧮",  
 )
 
@@ -19,6 +33,42 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
 CURRENT_YEAR = 2026
+
+
+def inject_meta_tags():
+    components.html(
+        f"""
+        <script>
+            const metaTags = [
+                {{ attr: "name", key: "description", value: {META_DESCRIPTION!r} }},
+                {{ attr: "property", key: "og:title", value: {OG_TITLE!r} }},
+                {{ attr: "property", key: "og:description", value: {OG_DESCRIPTION!r} }},
+                {{ attr: "property", key: "og:type", value: "website" }},
+                {{ attr: "property", key: "og:url", value: {APP_URL!r} }},
+                {{ attr: "property", key: "og:image", value: {OG_IMAGE_URL!r} }},
+                {{ attr: "property", key: "og:site_name", value: "Contexta" }},
+                {{ attr: "name", key: "twitter:card", value: "summary_large_image" }},
+                {{ attr: "name", key: "twitter:title", value: {OG_TITLE!r} }},
+                {{ attr: "name", key: "twitter:description", value: {OG_DESCRIPTION!r} }},
+                {{ attr: "name", key: "twitter:image", value: {OG_IMAGE_URL!r} }},
+            ];
+
+            document.title = {META_TITLE!r};
+
+            metaTags.forEach((tag) => {{
+                let element = document.head.querySelector(`meta[${{tag.attr}}="${{tag.key}}"]`);
+                if (!element) {{
+                    element = document.createElement("meta");
+                    element.setAttribute(tag.attr, tag.key);
+                    document.head.appendChild(element);
+                }}
+                element.setAttribute("content", tag.value);
+            }});
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
 DEFAULTS = {
     "tax_year": AVAILABLE_TAX_YEARS[0],
@@ -42,6 +92,8 @@ DEFAULTS = {
 for key, value in DEFAULTS.items():
     if key not in st.session_state:
         st.session_state[key] = value
+
+inject_meta_tags()
 
 def reset_form():
     for key, value in DEFAULTS.items():
