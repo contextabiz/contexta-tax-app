@@ -13,9 +13,8 @@ PROVINCES = {
 
 TAX_CONFIGS = {
     2025: {
-        "year": 2025,
         "federal_brackets": [
-            (57375.0, 0.14),
+            (57375.0, 0.145),
             (114750.0, 0.205),
             (177882.0, 0.26),
             (253414.0, 0.29),
@@ -26,7 +25,7 @@ TAX_CONFIGS = {
         "federal_bpa_phaseout_start": 177882.0,
         "federal_bpa_phaseout_end": 253414.0,
         "canada_employment_amount_max": 1471.0,
-        "federal_credit_rate": 0.14,
+        "federal_credit_rate": 0.145,
         "cpp_ympe": 71300.0,
         "cpp_yampe": 81200.0,
         "cpp_basic_exemption": 3500.0,
@@ -154,7 +153,6 @@ TAX_CONFIGS = {
         },
     },
     2026: {
-        "year": 2026,
         "federal_brackets": [
             (58523.0, 0.14),
             (117045.0, 0.205),

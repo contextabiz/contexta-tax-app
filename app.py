@@ -702,11 +702,177 @@ def build_tax_curve_data(
     return curve
 
 
-def format_currency_md(value: float) -> str:
-    return format_currency(value).replace("$", r"\$")
-
 def safe_currency(x):
     return format_currency(x).replace("$", "\\$")
+
+
+def build_refund_messages(
+    difference_display: float,
+    contribution_gap: float,
+    additional_tax_saved_to_optimization: float,
+    tax_withheld: float,
+    total_tax: float,
+):
+    contribution_gap_text = safe_currency(max(0.0, contribution_gap))
+    tax_saved_text = safe_currency(additional_tax_saved_to_optimization)
+
+    if difference_display > 0:
+        return {
+            "summary_line": (
+                f"At your current contribution level, you may receive a refund of "
+                f"{safe_currency(difference_display)}. Contributing {contribution_gap_text} more "
+                f"may save about {tax_saved_text} more tax."
+            ),
+            "status_kind": "success",
+            "status_message": "You may receive a tax refund because more tax was withheld than required.",
+        }
+
+    if difference_display < 0:
+        return {
+            "summary_line": (
+                f"At your current contribution level, you may owe "
+                f"{safe_currency(abs(difference_display))}. Contributing {contribution_gap_text} "
+                f"more may save about {tax_saved_text} more tax."
+            ),
+            "status_kind": "warning",
+            "status_message": (
+                f"You may owe additional tax because less tax was withheld "
+                f"({safe_currency(tax_withheld)}) than required ({safe_currency(total_tax)})."
+            ),
+        }
+
+    return {
+        "summary_line": (
+            "At your current contribution level, your withholding is close to your estimated tax. "
+            f"Contributing {contribution_gap_text} more may save about {tax_saved_text} more tax."
+        ),
+        "status_kind": "info",
+        "status_message": (
+            "Your tax withheld matches your estimated total tax, so you may have no refund or balance owing."
+        ),
+    }
+
+
+def build_contribution_status(
+    suggested_contribution: float,
+    contribution_gap: float,
+    total_contribution_tax_saved: float,
+    additional_tax_saved_to_optimization: float,
+    view_mode: str,
+):
+    if suggested_contribution == 0:
+        return {
+            "gap_label": "Contribution Gap",
+            "gap_value": format_currency_by_mode(0.0, view_mode),
+            "value_label": "Total Tax Saved",
+            "value": format_currency_by_mode(total_contribution_tax_saved, view_mode),
+            "message_kind": "info",
+            "message": (
+                "No additional contribution is suggested to reach a lower federal tax bracket. "
+                f"Your current contribution is saving you {safe_currency(total_contribution_tax_saved)} "
+                "in tax compared with making no contribution."
+            ),
+        }
+
+    if contribution_gap > 0:
+        return {
+            "gap_label": "Contribution Gap",
+            "gap_value": format_currency_by_mode(contribution_gap, view_mode),
+            "value_label": "Potential Extra Tax Savings",
+            "value": format_currency_by_mode(additional_tax_saved_to_optimization, view_mode),
+            "message_kind": "warning",
+            "message": (
+                f"You are already saving {safe_currency(total_contribution_tax_saved)} in tax.\n\n"
+                f"Increase by {safe_currency(contribution_gap)} to reach the suggested level and "
+                f"save about {safe_currency(additional_tax_saved_to_optimization)} more."
+            ),
+        }
+
+    if contribution_gap < 0:
+        return {
+            "gap_label": "Amount Above Target",
+            "gap_value": format_currency_by_mode(abs(contribution_gap), view_mode),
+            "value_label": "Total Tax Saved",
+            "value": format_currency_by_mode(total_contribution_tax_saved, view_mode),
+            "message_kind": "info",
+            "message": (
+                f"You are already saving {safe_currency(total_contribution_tax_saved)} in tax "
+                "compared with making no contribution.\n\n"
+                "Your current contribution may have exceeded the most tax-efficient level, "
+                "where additional contributions provide diminishing tax benefits."
+            ),
+        }
+
+    return {
+        "gap_label": "Contribution Gap",
+        "gap_value": format_currency_by_mode(0.0, view_mode),
+        "value_label": "Total Tax Saved",
+        "value": format_currency_by_mode(total_contribution_tax_saved, view_mode),
+        "message_kind": "success",
+        "message": (
+            f"You are already saving {safe_currency(total_contribution_tax_saved)} in tax "
+            "compared with making no contribution.\n\n"
+            "Your contribution is already at the most tax-efficient contribution level."
+        ),
+    }
+
+
+def build_breakdown_summary_rows(
+    breakdown_view: str,
+    province_name: str,
+    employment_income: float,
+    contribution_used: float,
+    rpp_contribution: float,
+    cpp_enhanced_deduction: float,
+    taxable_income: float,
+    federal_tax: float,
+    provincial_tax: float,
+    total_cpp: float,
+    ei: float,
+    net_take_home: float,
+    total_tax: float,
+    tax_withheld: float,
+    difference_display: float,
+    provincial_surtax: float,
+    provincial_health_premium: float,
+):
+    if difference_display >= 0:
+        refund_label = "Estimated Refund"
+    else:
+        refund_label = "Estimated Amount Owing"
+
+    if breakdown_view == "Simple":
+        return [
+            {"Item": "Employment Income", "Amount": employment_income},
+            {"Item": "Taxable Income", "Amount": taxable_income, "highlight": True},
+            {"Item": "Federal Tax", "Amount": federal_tax},
+            {"Item": f"{province_name} Tax", "Amount": provincial_tax},
+            {"Item": "Net Take-Home", "Amount": net_take_home, "highlight": True},
+        ]
+
+    return [
+        {"Item": "Employment Income", "Amount": employment_income},
+        {"Item": "Less: RRSP / FHSA Deduction", "Amount": -contribution_used},
+        {"Item": "Less: RPP Contribution", "Amount": -rpp_contribution},
+        {"Item": "Less: CPP Enhanced Deduction", "Amount": -cpp_enhanced_deduction},
+        {"Item": "Taxable Income", "Amount": taxable_income, "highlight": True},
+        {"Item": "Less: Federal Tax", "Amount": -federal_tax},
+        {"Item": f"Less: {province_name} Tax", "Amount": -provincial_tax},
+        {"Item": "Less: CPP Contribution", "Amount": -total_cpp},
+        {"Item": "Less: EI Premium", "Amount": -ei},
+        {"Item": "Add: CPP Enhanced Deduction", "Amount": cpp_enhanced_deduction},
+        {"Item": "Net Take-Home", "Amount": net_take_home, "highlight": True},
+        {"Item": "", "Amount": None},
+        {"Item": "Total Estimated Tax", "Amount": total_tax},
+        {"Item": "Income Tax Withheld", "Amount": tax_withheld},
+        {"Item": refund_label, "Amount": abs(difference_display)},
+        {"Item": f"{province_name} Surtax", "Amount": provincial_surtax},
+        {"Item": f"{province_name} Health Premium", "Amount": provincial_health_premium},
+    ]
+
+
+def show_status_message(kind: str, message: str):
+    getattr(st, kind)(message)
 
 def generate_pdf_report(
     province_name: str,
@@ -1050,6 +1216,20 @@ if st.session_state.calculated:
         "Monthly": "month",
         "Bi-weekly": "2 weeks",
     }[view_mode]
+    refund_messages = build_refund_messages(
+        difference_display=difference_display,
+        contribution_gap=contribution_gap,
+        additional_tax_saved_to_optimization=additional_tax_saved_to_optimization,
+        tax_withheld=tax_withheld,
+        total_tax=total_tax,
+    )
+    contribution_status = build_contribution_status(
+        suggested_contribution=suggested_contribution,
+        contribution_gap=contribution_gap,
+        total_contribution_tax_saved=total_contribution_tax_saved,
+        additional_tax_saved_to_optimization=additional_tax_saved_to_optimization,
+        view_mode=view_mode,
+    )
 
     st.markdown("""
     <style>
@@ -1128,7 +1308,7 @@ if st.session_state.calculated:
         <div class="net-takehome-card">
             <div class="net-takehome-label-row">
                 <div class="net-takehome-label">Net Take-Home</div>
-                <div class="tooltip-icon" data-tooltip="Net Take-Home = Employment Income − Tax − CPP − EI − RRSP/FHSA − RPP">?</div>
+                <div class="tooltip-icon" data-tooltip="Net Take-Home = Employment Income - Tax - CPP - EI - RRSP/FHSA - RPP">?</div>
             </div>
             <div class="net-takehome-value">{format_currency_by_mode(net_take_home, view_mode)}</div>
             <div class="net-takehome-sub">
@@ -1147,26 +1327,7 @@ if st.session_state.calculated:
         format_currency_by_mode(max(0.0, contribution_gap), view_mode),
     )
 
-    if difference_display > 0:
-        summary_line = (
-            f"At your current contribution level, you may receive a refund of {safe_currency(difference_display)}. "
-            f"Contributing {safe_currency(max(0.0, contribution_gap))} more may save about "
-            f"{safe_currency(additional_tax_saved_to_optimization)} more tax."
-        )
-    elif difference_display < 0:
-        summary_line = (
-            f"At your current contribution level, you may owe {safe_currency(abs(difference_display))}. "
-            f"Contributing {safe_currency(max(0.0, contribution_gap))} more may save about "
-            f"{safe_currency(additional_tax_saved_to_optimization)} more tax."
-        )
-    else:
-        summary_line = (
-            f"At your current contribution level, your withholding is close to your estimated tax. "
-            f"Contributing {safe_currency(max(0.0, contribution_gap))} more may save about "
-            f"{safe_currency(additional_tax_saved_to_optimization)} more tax."
-        )
-
-    st.info(summary_line)
+    st.info(refund_messages["summary_line"])
     st.caption("This is not payroll net pay. It is a simplified tax estimate based on annual employment income assumptions.")
     st.caption("Want a deeper strategy and breakdown? Reach out: info@contexta.biz")
 
@@ -1185,23 +1346,7 @@ if st.session_state.calculated:
         format_currency_by_mode(final_take_home, view_mode),
     )
 
-    if difference_display > 0:
-        st.success(
-            "You may receive a tax refund because more tax was withheld than required."
-        )
-    
-    elif difference_display < 0:
-        message = (
-            f"You may owe additional tax because less tax was withheld "
-            f"({safe_currency(tax_withheld)}) than required "
-            f"({safe_currency(total_tax)})."
-        )
-        st.warning(message)
-    
-    else:
-        st.info(
-            "Your tax withheld matches your estimated total tax, so you may have no refund or balance owing."
-        )
+    show_status_message(refund_messages["status_kind"], refund_messages["status_message"])
 
     with st.expander("Income Breakdown"):
         st.write(
@@ -1382,45 +1527,18 @@ if st.session_state.calculated:
 
     contribution_col1.metric("Current Contribution", format_currency_by_mode(deductible_contribution, view_mode))
 
-    if suggested_contribution == 0:
-        contribution_col2.metric("Contribution Gap", format_currency_by_mode(0.0, view_mode))
-        contribution_col3.metric("Total Tax Saved", format_currency_by_mode(total_contribution_tax_saved, view_mode))
-        st.info(
-            f"No additional contribution is suggested to reach a lower federal tax bracket. "
-            f"Your current contribution is saving you "
-            f"{format_currency(total_contribution_tax_saved)} in tax compared with making no contribution."
-        )
-
-    elif contribution_gap > 0:
-        contribution_col2.metric("Contribution Gap", format_currency_by_mode(contribution_gap, view_mode))
-        contribution_col3.metric(
-            "Potential Extra Tax Savings",
-            format_currency_by_mode(additional_tax_saved_to_optimization, view_mode),
-        )
-        st.warning(
-            f"You are already saving {format_currency_md(total_contribution_tax_saved)} in tax.\n\n"
-            f"Increase by {format_currency_md(contribution_gap)} to reach the suggested level and "
-            f"save about {format_currency_md(additional_tax_saved_to_optimization)} more."
-        )
-
-    elif contribution_gap < 0:
-        contribution_col2.metric("Amount Above Target", format_currency_by_mode(abs(contribution_gap), view_mode))
-        contribution_col3.metric("Total Tax Saved", format_currency_by_mode(total_contribution_tax_saved, view_mode))
-        st.info(
-            f"You are already saving {format_currency(total_contribution_tax_saved)} in tax "
-            f"compared with making no contribution.\n\n"
-            f"Your current contribution may have exceeded the most tax-efficient level, "
-            f"where additional contributions provide diminishing tax benefits."
-        )
-
-    else:
-        contribution_col2.metric("Contribution Gap", format_currency_by_mode(0.0, view_mode))
-        contribution_col3.metric("Total Tax Saved", format_currency_by_mode(total_contribution_tax_saved, view_mode))
-        st.success(
-            f"You are already saving {format_currency(total_contribution_tax_saved)} in tax "
-            f"compared with making no contribution.\n\n"
-            f"Your contribution is already at the most tax-efficient contribution level. "
-        )
+    contribution_col2.metric(
+        contribution_status["gap_label"],
+        contribution_status["gap_value"],
+    )
+    contribution_col3.metric(
+        contribution_status["value_label"],
+        contribution_status["value"],
+    )
+    show_status_message(
+        contribution_status["message_kind"],
+        contribution_status["message"],
+    )
 
     st.markdown(
         "#### RRSP & FHSA Contribution vs Tax Savings",
@@ -1646,42 +1764,25 @@ if st.session_state.calculated:
         if breakdown_view == "Simple":
             st.caption("Simple view keeps the key calculation summary first. Switch to Detailed for tax rates, federal/provincial, and CPP/EI details below.")
 
-        if difference_display >= 0:
-            refund_label = "Estimated Refund"
-        else:
-            refund_label = "Estimated Amount Owing"
-
-        if breakdown_view == "Simple":
-            summary_rows = [
-                {"Item": "Employment Income", "Amount": employment_income},
-                {"Item": "Taxable Income", "Amount": taxable_income, "highlight": True},
-                {"Item": "Federal Tax", "Amount": federal_tax},
-                {"Item": f"{province_name} Tax", "Amount": provincial_tax},
-                {"Item": "Net Take-Home", "Amount": net_take_home, "highlight": True},
-            ]
-        else:
-            summary_rows = [
-                {"Item": "Employment Income", "Amount": employment_income},
-                {"Item": "Less: RRSP / FHSA Deduction", "Amount": -contribution_used},
-                {"Item": "Less: RPP Contribution", "Amount": -rpp_contribution},
-                {"Item": "Less: CPP Enhanced Deduction", "Amount": -cpp_enhanced_deduction},
-                {"Item": "Taxable Income", "Amount": taxable_income, "highlight": True},
-                {"Item": "Less: Federal Tax", "Amount": -federal_tax},
-                {"Item": f"Less: {province_name} Tax", "Amount": -provincial_tax},
-                {"Item": "Less: CPP Contribution", "Amount": -total_cpp},
-                {"Item": "Less: EI Premium", "Amount": -ei},
-                {"Item": "Add: CPP Enhanced Deduction", "Amount": cpp_enhanced_deduction},
-                {"Item": "Net Take-Home", "Amount": net_take_home, "highlight": True},
-            ]
-
-            summary_rows.extend([
-                {"Item": "", "Amount": None},
-                {"Item": "Total Estimated Tax", "Amount": total_tax},
-                {"Item": "Income Tax Withheld", "Amount": tax_withheld},
-                {"Item": refund_label, "Amount": abs(difference_display)},
-                {"Item": f"{province_name} Surtax", "Amount": provincial_surtax},
-                {"Item": f"{province_name} Health Premium", "Amount": provincial_health_premium},
-            ])
+        summary_rows = build_breakdown_summary_rows(
+            breakdown_view=breakdown_view,
+            province_name=province_name,
+            employment_income=employment_income,
+            contribution_used=contribution_used,
+            rpp_contribution=rpp_contribution,
+            cpp_enhanced_deduction=cpp_enhanced_deduction,
+            taxable_income=taxable_income,
+            federal_tax=federal_tax,
+            provincial_tax=provincial_tax,
+            total_cpp=total_cpp,
+            ei=ei,
+            net_take_home=net_take_home,
+            total_tax=total_tax,
+            tax_withheld=tax_withheld,
+            difference_display=difference_display,
+            provincial_surtax=provincial_surtax,
+            provincial_health_premium=provincial_health_premium,
+        )
 
         st.markdown("#### Calculation Summary")
 
@@ -1696,12 +1797,9 @@ if st.session_state.calculated:
             formatted_amount = format_currency_by_mode(amount, view_mode)
 
             if row.get("highlight"):
-                icon = "💡" if item == "Taxable Income" else "💰"
-                st.markdown(f"**{icon} {item}: {formatted_amount}**")
+                st.markdown(f"**{item}: {formatted_amount}**")
             else:
                 st.write(f"{item}: {formatted_amount}")
-
-        # 放 CTA 喺呢度
 
         if breakdown_view == "Detailed":
             st.markdown("---")
