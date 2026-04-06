@@ -29,10 +29,11 @@ import pandas as pd
 import altair as alt
 import io
 import os
+from datetime import date, datetime
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-CURRENT_YEAR = 2026
+CURRENT_YEAR = date.today().year
 
 
 def inject_meta_tags():
@@ -95,6 +96,18 @@ for key, value in DEFAULTS.items():
 
 inject_meta_tags()
 
+st.markdown(
+    """
+    <style>
+    .block-container {
+        max-width: 1080px;
+        padding-top: 2rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 def reset_form():
     for key, value in DEFAULTS.items():
         st.session_state[key] = value
@@ -119,6 +132,9 @@ def adjust_deductible_contribution(
 
 selected_province_name = PROVINCES[st.session_state.get("province", "ON")]
 
+if os.path.exists("contexta_logo.png"):
+    st.image("contexta_logo.png", width=150)
+
 st.header(
     f"{selected_province_name} Income Tax Estimator",
     help=f"""
@@ -130,7 +146,7 @@ Assumptions used in this estimate:
 - Basic personal credits only
 - No tax credits (tuition, medical, donations, etc.)
 - No multiple-job payroll mismatch adjustments
-"""
+""",
 )
 
 # -----------------------------
@@ -928,7 +944,6 @@ def generate_pdf_report(
 
     line(report_title, gap=24, bold=True)
     line(f"Tax Year: {tax_year}")
-    from datetime import datetime
     line(f"Generated on: {datetime.now().strftime('%Y-%m-%d')}")
     line("")
 
@@ -993,7 +1008,6 @@ def generate_pdf_report(
     line("Need a personalized tax or investment strategy?", bold=True)
     line("Contact: info@contexta.biz")
 
-    p.showPage()
     p.save()
 
     buffer.seek(0)
@@ -1162,7 +1176,6 @@ if st.session_state.calculated:
 
     difference = tax_withheld - total_tax
     difference_display = round(difference, 2)
-    target_withholding_gap = max(0.0, total_tax - tax_withheld)
 
     if abs(difference_display) < 0.01:
         difference_display = 0.0
@@ -1177,7 +1190,9 @@ if st.session_state.calculated:
         - contribution_used
     )
     net_take_home_ratio = net_take_home / employment_income if employment_income > 0 else 0.0
-    final_take_home = net_take_home + difference_display
+    # Final take-home after tax filing should align with estimated tax payable,
+    # not add the refund / owing adjustment a second time.
+    final_take_home = net_take_home
 
     breakdown_df = pd.DataFrame({
         "Category": ["Tax", "CPP", "EI", "RRSP/FHSA", "RPP", "Take Home"],
@@ -1321,7 +1336,7 @@ if st.session_state.calculated:
 
     summary_col1, summary_col2, summary_col3 = st.columns(3)
     summary_col1.metric("Estimated Total Tax", format_currency_by_mode(total_tax, view_mode))
-    summary_col2.metric("Refund / Owing", format_currency_by_mode(difference_display, view_mode))
+    summary_col2.metric("Refund / Owing", format_currency(difference_display))
     summary_col3.metric(
         "Suggested Contribution Gap",
         format_currency_by_mode(max(0.0, contribution_gap), view_mode),
@@ -1338,7 +1353,7 @@ if st.session_state.calculated:
 
     takehome_col1.metric(
         "Tax Refund / Owing",
-        format_currency_by_mode(difference_display, view_mode),
+        format_currency(difference_display),
     )
 
     takehome_col2.metric(
@@ -1476,31 +1491,6 @@ if st.session_state.calculated:
             " RPP is treated separately as a fixed deduction."
         ),
     )
-
-    st.markdown("#### Planning Tools")
-    planning_col1, planning_col2 = st.columns(2)
-    planning_col1.metric(
-        "Extra Tax to Set Aside",
-        format_currency_by_mode(target_withholding_gap, view_mode),
-        help="Target refund/owing = $0. This estimates the additional tax to set aside if your current withholding is not enough.",
-    )
-    if use_auto_withheld:
-        extra_tax_per_pay = (
-            target_withholding_gap / pay_periods_map[pay_frequency]
-            if pay_periods_map[pay_frequency] > 0
-            else 0.0
-        )
-        planning_col2.metric(
-            "Extra Tax Per Pay",
-            format_currency(extra_tax_per_pay),
-            help="Estimated extra tax to reserve each pay period to finish near $0 refund/owing.",
-        )
-    else:
-        planning_col2.metric(
-            "Target Refund / Owing",
-            format_currency_by_mode(0.0, view_mode),
-            help="A value of $0 means tax withheld matches estimated tax.",
-        )
 
     st.markdown("#### What If Quick Buttons")
     quick_col1, quick_col2, quick_col3 = st.columns(3)

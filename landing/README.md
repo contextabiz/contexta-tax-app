@@ -11,7 +11,7 @@ This folder contains the safer SEO/social-sharing entry page for `https://tax.co
 
 ## Recommended deployment structure
 
-- Serve [index.html](C:\Users\BertWu\Desktop\ontario-tax-estimator\landing\index.html) as `https://tax.contexta.biz/`
+- Serve `landing/index.html` as `https://tax.contexta.biz/`
 - Copy `canadian-income-tax-estimator-og.jpg` to the same public web root
 - Proxy `/app/` to your Streamlit process
 
@@ -25,7 +25,7 @@ This folder contains the safer SEO/social-sharing entry page for `https://tax.co
 
 ## Nginx
 
-Use [nginx.conf.example](C:\Users\BertWu\Desktop\ontario-tax-estimator\landing\nginx.conf.example) as the starting point.
+Use `landing/nginx.conf.example` as the starting point.
 
 ## Important note
 
